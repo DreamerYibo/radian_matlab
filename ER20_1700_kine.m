@@ -30,38 +30,96 @@ f_T0_4 = matlabFunction(T0_4);
 T0_5 = simplify(T0_4 * T4_5);
 f_T0_5 = matlabFunction(T0_5);
 
-syms J Jv J_omega  ksi1 ksi2 ksi3 ksi4 ksi5 ksi6 rho1 rho2 rho3 rho4 rho5 rho6 % Get the Jaccobian mat of the robot. Choose the base frame 0 as the reference
+syms J Jv J_omega ksi1 ksi2 ksi3 ksi4 ksi5 ksi6 rho1 rho2 rho3 rho4 rho5 rho6 % Get the Jaccobian mat of the robot. Choose the base frame 0 as the reference
 syms J3_debug Jv_dbg Jomg_dbg rho1_dbg rho2_dbg rho3_dbg
 
-ksi1 = [0;0;1];
-ksi2 = T0_1(1:3,3);
-ksi3 = T0_2(1:3,3);
-ksi4 = T0_3(1:3,3);
-ksi5 = T0_4(1:3,3);
-ksi6 = T0_5(1:3,3);
+ksi1 = [0; 0; 1];
+ksi2 = T0_1(1:3, 3);
+ksi3 = T0_2(1:3, 3);
+ksi4 = T0_3(1:3, 3);
+ksi5 = T0_4(1:3, 3);
+ksi6 = T0_5(1:3, 3);
 
-rho1 = simplify(T0_6(1:3,4));
-rho2 = simplify(T0_6(1:3,4) - T0_1(1:3,4));
-rho3 = simplify(T0_6(1:3,4) - T0_2(1:3,4));
-rho4 = simplify(T0_6(1:3,4) - T0_3(1:3,4));
-rho5 = simplify(T0_6(1:3,4) - T0_4(1:3,4));
-rho6 = [0;0;0]; % NOTE this!
+rho1 = simplify(T0_6(1:3, 4));
+rho2 = simplify(T0_6(1:3, 4) - T0_1(1:3, 4));
+rho3 = simplify(T0_6(1:3, 4) - T0_2(1:3, 4));
+rho4 = simplify(T0_6(1:3, 4) - T0_3(1:3, 4));
+rho5 = simplify(T0_6(1:3, 4) - T0_4(1:3, 4));
+rho6 = [0; 0; 0]; % NOTE this!
 
-Jv = [cross(rho1, ksi1), cross(rho2, ksi2),cross(rho3, ksi3),cross(rho4, ksi4),cross(rho5, ksi5),cross(rho6, ksi6)];
+Jv = [cross(ksi1, rho1), cross(ksi2, rho2), cross(ksi3, rho3), cross(ksi4, rho4), cross(ksi5, rho5), cross(ksi6, rho6)];
 Jv = simplify(Jv)
 J_omega = [ksi1, ksi2, ksi3, ksi4, ksi5, ksi6];
 J_omega = simplify(J_omega)
 
-J = simplify([Jv;J_omega])
+J = simplify([Jv; J_omega])
 
-rho1_dbg = T0_3(1:3,4);
-rho2_dbg = T0_3(1:3,4) - T0_1(1:3,4);
-rho3_dbg = T0_3(1:3,4) - T0_2(1:3,4);
+rho1_dbg = T0_3(1:3, 4);
+rho2_dbg = T0_3(1:3, 4) - T0_1(1:3, 4);
+rho3_dbg = T0_3(1:3, 4) - T0_2(1:3, 4);
 
 Jomg_dbg = [ksi1, ksi2, ksi3];
-Jv_dbg = [cross(rho1_dbg, ksi1), cross(rho2_dbg, ksi2),cross(rho3_dbg, ksi3)];
+Jv_dbg = [cross(rho1_dbg, ksi1), cross(rho2_dbg, ksi2), cross(rho3_dbg, ksi3)];
 
-J3_debug = simplify([Jv_dbg;Jomg_dbg])
+J3_debug = simplify([Jv_dbg; Jomg_dbg])
+
+syms J_d J_a J_alpha rho_temp ksi_temp % similar definition as the jacobian for joint position
+
+% rho1 = simplify(T0_6(1:3,4));
+% rho2 = simplify(T0_6(1:3,4) - T0_1(1:3,4));
+% rho3 = simplify(T0_6(1:3,4) - T0_2(1:3,4));
+% rho4 = simplify(T0_6(1:3,4) - T0_3(1:3,4));
+% rho5 = simplify(T0_6(1:3,4) - T0_4(1:3,4));
+% rho6 = [0;0;0]; % NOTE this!
+
+%Get J_d so that we will get the relation between end's velocity and DH param d's velocity(fake).
+ksi1 = [0; 0; 1];
+ksi2 = T0_1(1:3, 3);
+ksi3 = T0_2(1:3, 3);
+ksi4 = T0_3(1:3, 3);
+ksi5 = T0_4(1:3, 3);
+ksi6 = T0_5(1:3, 3);
+
+J_d = [ksi1, ksi2, ksi3, ksi4, ksi5, ksi6];
+J_d = [J_d; zeros(3, 6)];
+
+%Get J_a. Note the choice of xi.
+ksi1 = T0_1(1:3, 1);
+ksi2 = T0_2(1:3, 1);
+ksi3 = T0_3(1:3, 1);
+ksi4 = T0_4(1:3, 1);
+ksi5 = T0_5(1:3, 1);
+ksi6 = T0_6(1:3, 1);
+
+J_a = [ksi1, ksi2, ksi3, ksi4, ksi5, ksi6];
+J_a = [J_a; zeros(3, 6)];
+
+%Get J_alpha. Only has 5 cols. Assume the z0 axis can not move. Note this. This may not be right.
+ksi1 = T0_1(1:3, 1);
+ksi2 = T0_2(1:3, 1);
+ksi3 = T0_3(1:3, 1);
+ksi4 = T0_4(1:3, 1);
+ksi5 = T0_5(1:3, 1);
+% ksi6 = [0;0;0];
+
+rho1 = simplify(T0_6(1:3, 4) - T0_1(1:3, 4));
+rho2 = simplify(T0_6(1:3, 4) - T0_2(1:3, 4));
+rho3 = simplify(T0_6(1:3, 4) - T0_3(1:3, 4));
+rho4 = simplify(T0_6(1:3, 4) - T0_4(1:3, 4));
+rho5 = simplify(T0_6(1:3, 4) - T0_5(1:3, 4));
+% rho6 = [0;0;0]; % NOTE this!
+
+Jv = [cross(ksi1, rho1), cross(ksi2, rho2), cross(ksi3, rho3), cross(ksi4, rho4), cross(ksi5, rho5)];
+Jv = simplify(Jv);
+J_omega = [ksi1, ksi2, ksi3, ksi4, ksi5];
+J_omega = simplify(J_omega);
+
+J_alpha = simplify([Jv; J_omega]);
+
+syms C; %C is the matrix for least square estimation of DH param's deviation
+C = [J, J_d, J_a, J_alpha];
+C(1:3, :) = C(1:3, :) * 1e-3; % unit: m
+C_fcn = matlabFunction(C);
 
 save('ER20_1700_kine_fcn.mat');
 % N = 100;
