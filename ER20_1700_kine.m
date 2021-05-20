@@ -117,8 +117,12 @@ J_omega = simplify(J_omega);
 J_alpha = simplify([Jv; J_omega]);
 
 syms C; %C is the matrix for least square estimation of DH param's deviation
+J(1:3, :) = J(1:3, :) * 1e-3; % unit: m
+J_alpha(1:3, :) = J_alpha (1:3, :) * 1e-3; % unit: m
+
 C = [J, J_d, J_a, J_alpha];
-C(1:3, :) = C(1:3, :) * 1e-3; % unit: m
+
+% C(1:3, :) = C(1:3, :) * 1e-3; % unit: m WRONG STEP! J_d AND J_a can not multiply 1e-3!
 C_fcn = matlabFunction(C);
 
 save('ER20_1700_kine_fcn.mat');

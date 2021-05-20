@@ -139,9 +139,10 @@ for i = 1:4
 
     Tr_6_assume = Tr_t_measured(:, :, i) * inv(T6_t_assume);
 
-    Tr_0_assume(:, :, i) =  Tr_6_assume * inv(T06_ideal(:, :, i));
+    Tr_0_assume(:, :, i) = Tr_6_assume * inv(T06_ideal(:, :, i));
 
     if i <= 3
         X(1) = X(1) + deg2rad(90);
     end
+
 end
