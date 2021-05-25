@@ -39,7 +39,7 @@ disp(r_X_t_test(:, :, 1));
 for i = 2:7
     %rotate about the nominal TCP's X (Y or Z) axis; 2 samples for each case.
     X_temp = f_T0_6(L_ideal(1), L_ideal(2), L_ideal(3), L_ideal(4), L_ideal(5), L_ideal(6), X(1), X(2), X(3), X(4), X(5), X(6));
-
+    
     if (i <= 3)
         angle_to_rot = [deg2rad(45) * (i - 1), 0, 0];
     elseif (i <= 5)

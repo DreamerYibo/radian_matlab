@@ -26,20 +26,21 @@ actual_T0_6 = actual_T0_1 * actual_T1_2 * actual_T2_3 * actual_T3_4 * actual_T4_
 
 actual_f_T0_6 = matlabFunction(actual_T0_6);
 
-theta_series_bound = deg2rad([-45, 45; ...
-    - 10, 30; ...
+theta_series_bound = deg2rad([30, 100; ...
+    - 25, 20; ...
     -20, 30; ...
-    -60, 60; ...
-    -30, 15; ...
-    -45, 45]);
-nn = 40;
+    -90, 0; ...
+    0 , 50; ...
+    -30, 30]);
+nn = 20;
 joint_target_series = zeros(6, 3 * nn); % 18 sets of test joint pos.
 theta123_target = zeros(3, nn);
 
 
+
 % method 1, will lead C
 for i = 1:3
-    theta123_target(i, :) = linspace(theta_series_bound(1, 1), theta_series_bound(1, 2), nn);
+    theta123_target(i, :) = linspace(theta_series_bound(i, 1), theta_series_bound(i, 2), nn);
 end
 
 for i = 1:3 % set theta1 2 and 3
@@ -59,38 +60,58 @@ end
 %     joint_target_series(1:6,i) = theta_series_bound(1:6,1) + rand(6,1).*(theta_series_bound(1:6,2) - theta_series_bound(1:6,1));
 % end
 
-C_combined = zeros(6*3*nn,23);
-% C_only_Jtheta_and_Jalpha = zeros(6*3*nn,11);
-% C_only_Jd_and_Ja = zeros(6*3*nn,11);
-delta_X_combined = zeros(6*3*nn,1);
 
-for i=1:3*nn % test actual and ideal end pose
-    X = joint_target_series(:,i);
-    actual_T0_6_val = actual_f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
-    ideal_T0_6_val = f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
-    % D_T0_6 = actual_T0_6_val * inv(ideal_T0_6_val)
-    delta_P = actual_T0_6_val(1:3,4) - ideal_T0_6_val(1:3,4)
-    temp_delta_R =  actual_T0_6_val(1:3,1:3) * transpose(ideal_T0_6_val(1:3,1:3)); % 0 frame as the ref frame
-    delta_orientation = [temp_delta_R(3,2); temp_delta_R(1,3); temp_delta_R(2,1)] % see page 72
+
+d_DH_param = zeros(22,1); 
+d_DH_param_addition = zeros(22,1); % use this to update the DH parameter
+delta_P_measure_noise = 0.001 * randn(3,3*nn);%unit: mm. standard deviation = 0.005
+delta_orientation_measure_noise = deg2rad(0.01) * randn(3,3*nn); %unit: rad. standard deviation = 0.01 degree
+
+
+for iterate_times = 1:10 % update C_fcn and T0_6 each iteration
+
+    C_combined = zeros(6*3*nn,23);
+    % C_only_Jtheta_and_Jalpha = zeros(6*3*nn,11);
+    % C_only_Jd_and_Ja = zeros(6*3*nn,11);
+    delta_X_combined = zeros(6*3*nn,1);
+    disp("iteration: " + iterate_times);
+    [C_fcn_handle, mod_T06_fcn_handle] = get_C_fcn_and_T06(d_DH_param);
+
+    for i=1:3*nn % test actual and ideal end pose
+        X = joint_target_series(:,i);
+        actual_T0_6_val = actual_f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
+        ideal_T0_6_val = mod_T06_fcn_handle(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
+        % D_T0_6 = actual_T0_6_val * inv(ideal_T0_6_val)
+        
+        delta_P = actual_T0_6_val(1:3,4) - ideal_T0_6_val(1:3,4);
+        % delta_P_measure_noise = 0.01 * randn(3,1); 
+        delta_P = delta_P + delta_P_measure_noise(:,i)
+        
+        temp_delta_R =  actual_T0_6_val(1:3,1:3) * transpose(ideal_T0_6_val(1:3,1:3)); % 0 frame as the ref frame
+        delta_orientation = [temp_delta_R(3,2); temp_delta_R(1,3); temp_delta_R(2,1)]; % see page 72
+        % delta_orientation_measure_noise = deg2rad(0.01) * randn(3,1);
+        delta_orientation = delta_orientation+delta_orientation_measure_noise(:,i)
+        
+        delta_X_combined(1 + (i-1)*6: 1 + (i-1)*6 + 5, 1) = [(delta_P*1e-3); delta_orientation]; % unit : m and rad.
+        C_combined(1 + (i-1)*6: 1 + (i-1)*6 + 5, :) = C_fcn_handle(L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
+        
+    end
     
+    C_combined(:,9) = []; % the J_d's rank is always less than 6 because z1 and z2 axises are paralel. Thus, let d23 = d2 + d3.
     
-    delta_X_combined(1 + (i-1)*6: 1 + (i-1)*6 + 5, 1) = [delta_P*1e-3; delta_orientation]; % unit : m and rad
-    C_combined(1 + (i-1)*6: 1 + (i-1)*6 + 5, :) = C_fcn(L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
+    temp_1 = transpose(C_combined)*delta_X_combined;
+    temp_2 = transpose(C_combined)* C_combined;
     
+    d_DH_param_addition = temp_2\temp_1;
+
+    d_DH_param = d_DH_param + d_DH_param_addition; %IMPORTANT: Update this each iteration!!!!!
+    
+    actual_d_DH_param = [actual_delta_theta, actual_delta_d*1e-3, actual_delta_a*1e-3, actual_delta_alpha]'; % unit m and rad
+    actual_d_DH_param(8) = actual_d_DH_param(8) + actual_d_DH_param(9);
+    actual_d_DH_param(9) = [];
+    
+    % (d_DH_param - actual_d_DH_param)./actual_d_DH_param
 end
-
-C_combined(:,9) = []; % the J_d's rank is always less than 6 because z1 and z2 axises are paralel. Thus, let d23 = d2 + d3.
-
-temp_1 = transpose(C_combined)*delta_X_combined;
-temp_2 = transpose(C_combined)* C_combined;
-
-d_DH_param = temp_2\temp_1;
-
-actual_d_DH_param = [actual_delta_theta, actual_delta_d*1e-3, actual_delta_a*1e-3, actual_delta_alpha]'; % unit m and rad
-actual_d_DH_param(8) = actual_d_DH_param(8) + actual_d_DH_param(9);
-actual_d_DH_param(9) = [];
-
-(d_DH_param - actual_d_DH_param)./actual_d_DH_param
 % actual_d_DH_param
 
 % C_combined * actual_d_DH_param - delta_X_combined
@@ -99,76 +120,78 @@ actual_d_DH_param(9) = [];
 
 %% PART 2
 % Guess d_alpha and d_theta with the known delta_orientation at first. Then use the result to guess d_a and d_d. Try this
-C_only_Jtheta_and_Jalpha = C_combined;
-C_only_Jd_and_Ja = C_only_Jtheta_and_Jalpha(:, 7:17);
-C_only_Jtheta_and_Jalpha(:, 7:17) = [];
+% C_only_Jtheta_and_Jalpha = C_combined;
+% C_only_Jd_and_Ja = C_only_Jtheta_and_Jalpha(:, 7:17);
+% C_only_Jtheta_and_Jalpha(:, 7:17) = [];
 
-arr1 = zeros(1,3*3*nn);
-arr2 = zeros(1,3*3*nn);
-cnt = 0;
-for i=1:6:6*3*nn
-    arr1(1+cnt*3:3+cnt*3) = [i,i+1,i+2];
-    arr2(1+cnt*3:3+cnt*3) = (i+3):(i+5);
-    cnt = cnt+1;
-end
-C_only_Jtheta_and_Jalpha(arr1,:) = [];
-C_only_Jd_and_Ja(arr2, :) = [];
-
+% arr1 = zeros(1,3*3*nn);
+% arr2 = zeros(1,3*3*nn);
+% cnt = 0;
 % for i=1:6:6*3*nn
-%     C_only_Jtheta_and_Jalpha(i:i+2, :) = [];
-%     C_only_Jd_and_Ja(i+3:i+5, :) = [];
+%     arr1(1+cnt*3:3+cnt*3) = [i,i+1,i+2];
+%     arr2(1+cnt*3:3+cnt*3) = (i+3):(i+5);
+%     cnt = cnt+1;
+% end
+% C_only_Jtheta_and_Jalpha(arr1,:) = [];
+% C_only_Jd_and_Ja(arr2, :) = [];
+
+% % for i=1:6:6*3*nn
+% %     C_only_Jtheta_and_Jalpha(i:i+2, :) = [];
+% %     C_only_Jd_and_Ja(i+3:i+5, :) = [];
+% % end
+
+% delta_orien_combined = zeros(3*3*nn,1);
+% delta_p_combined= zeros(3*3*nn,1);
+
+% for i=1:3*nn
+%     X = joint_target_series(:,i);
+%     actual_T0_6_val = actual_f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
+%     ideal_T0_6_val = f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
+%     temp_delta_R =  actual_T0_6_val(1:3,1:3) * transpose(ideal_T0_6_val(1:3,1:3)); % 0 frame as the ref frame
+%     delta_orientation = [temp_delta_R(3,2); temp_delta_R(1,3); temp_delta_R(2,1)] % see page 72
+%     delta_orien_combined(1 + (i-1)*3: 1 + (i-1)*3 + 2, 1) = delta_orientation; % unit : m and rad
 % end
 
-delta_orien_combined = zeros(3*3*nn,1);
-delta_p_combined= zeros(3*3*nn,1);
+% C_only_Jtheta_and_Jalpha(:,3) = []; % let d_theta2_ = d_theta2+d_theta3
+% temp_1 = transpose(C_only_Jtheta_and_Jalpha)*delta_orien_combined;
+% temp_2 = transpose(C_only_Jtheta_and_Jalpha)* C_only_Jtheta_and_Jalpha;
 
-for i=1:3*nn
-    X = joint_target_series(:,i);
-    actual_T0_6_val = actual_f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
-    ideal_T0_6_val = f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
-    temp_delta_R =  actual_T0_6_val(1:3,1:3) * transpose(ideal_T0_6_val(1:3,1:3)); % 0 frame as the ref frame
-    delta_orientation = [temp_delta_R(3,2); temp_delta_R(1,3); temp_delta_R(2,1)] % see page 72
-    delta_orien_combined(1 + (i-1)*3: 1 + (i-1)*3 + 2, 1) = delta_orientation; % unit : m and rad
-end
+% d_theta_and_alpha_param = temp_2\temp_1;
+% mod_theta = d_theta_and_alpha_param(1:5); %  d_theta2_ = d_theta2+d_theta3
+% mod_alpha = d_theta_and_alpha_param(6:10);
 
-C_only_Jtheta_and_Jalpha(:,3) = []; % let d_theta2_ = d_theta2+d_theta3
-temp_1 = transpose(C_only_Jtheta_and_Jalpha)*delta_orien_combined;
-temp_2 = transpose(C_only_Jtheta_and_Jalpha)* C_only_Jtheta_and_Jalpha;
+% % Note the sign before the mod_theta and mod_alpha!!!!
+% mod_T0_1 = eval(simplify(DH_T_2(x1 + mod_theta(1), L1, L8, pi / 2 + mod_alpha(1))));
+% mod_T1_2 = eval(simplify(DH_T_2(x2 - pi / 2 + mod_theta(2), 0, -L2, 0 + mod_alpha(2))));
+% mod_T2_3 = eval(simplify(DH_T_2(x3 + pi, 0 , L3, pi / 2 + mod_alpha(3))));
+% mod_T3_4 = eval(simplify(DH_T_2(x4 + mod_theta(3), L4 , 0 , -pi / 2 + mod_alpha(4))));
+% mod_T4_5 = eval(simplify(DH_T_2(x5 + mod_theta(4), 0 , 0 , pi / 2 + mod_alpha(5))));
+% mod_T5_6 = eval(simplify(DH_T_2(x6 + mod_theta(5), L5, 0 , 0)));
 
-d_theta_and_alpha_param = temp_2\temp_1;
-mod_theta = d_theta_and_alpha_param(1:5); %  d_theta2_ = d_theta2+d_theta3
-mod_alpha = d_theta_and_alpha_param(6:10);
+% mod_T0_6 = mod_T0_1 * mod_T1_2 * mod_T2_3 * mod_T3_4 * mod_T4_5 * mod_T5_6;
+% mod_f_T0_6 = matlabFunction(mod_T0_6);
 
-% Note the sign before the mod_theta and mod_alpha!!!!
-mod_T0_1 = eval(simplify(DH_T_2(x1 + mod_theta(1), L1, L8, pi / 2 + mod_alpha(1))));
-mod_T1_2 = eval(simplify(DH_T_2(x2 - pi / 2 + mod_theta(2), 0, -L2, 0 + mod_alpha(2))));
-mod_T2_3 = eval(simplify(DH_T_2(x3 + pi, 0 , L3, pi / 2 + mod_alpha(3))));
-mod_T3_4 = eval(simplify(DH_T_2(x4 + mod_theta(3), L4 , 0 , -pi / 2 + mod_alpha(4))));
-mod_T4_5 = eval(simplify(DH_T_2(x5 + mod_theta(4), 0 , 0 , pi / 2 + mod_alpha(5))));
-mod_T5_6 = eval(simplify(DH_T_2(x6 + mod_theta(5), L5, 0 , 0)));
+% for i=1:3*nn
+%     X = joint_target_series(:,i);
+%     mod_T0_6_val = mod_f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
+%     actual_T0_6_val = actual_f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
+%     % temp_delta_R =  actual_T0_6_val(1:3,1:3) * transpose(mod_T0_6_val(1:3,1:3)); % 0 frame as the ref frame
+%     % delta_orientation = [temp_delta_R(3,2); temp_delta_R(1,3); temp_delta_R(2,1)]; % see page 72
+%     % disp(delta_orientation);%debug
 
-mod_T0_6 = mod_T0_1 * mod_T1_2 * mod_T2_3 * mod_T3_4 * mod_T4_5 * mod_T5_6;
-mod_f_T0_6 = matlabFunction(mod_T0_6);
+%     delta_P = actual_T0_6_val(1:3,4) - mod_T0_6_val(1:3,4);
+%     disp(delta_P)
+%     delta_p_combined(1 + (i-1)*3: 1 + (i-1)*3 + 2, 1) = delta_P; % unit : mm
+% end
 
-for i=1:3*nn
-    X = joint_target_series(:,i);
-    mod_T0_6_val = mod_f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
-    actual_T0_6_val = actual_f_T0_6(L_ideal(1),L_ideal(2),L_ideal(3),L_ideal(4),L_ideal(5),L_ideal(6),X(1),X(2),X(3),X(4),X(5),X(6));
-    % temp_delta_R =  actual_T0_6_val(1:3,1:3) * transpose(mod_T0_6_val(1:3,1:3)); % 0 frame as the ref frame
-    % delta_orientation = [temp_delta_R(3,2); temp_delta_R(1,3); temp_delta_R(2,1)]; % see page 72
-    % disp(delta_orientation);%debug
+% temp_1 = transpose(C_only_Jd_and_Ja)*delta_p_combined;
+% temp_2 = transpose(C_only_Jd_and_Ja)* C_only_Jd_and_Ja;
 
-    delta_P = actual_T0_6_val(1:3,4) - mod_T0_6_val(1:3,4);
-    disp(delta_P)
-    delta_p_combined(1 + (i-1)*3: 1 + (i-1)*3 + 2, 1) = delta_P; % unit : mm
-end
+% d_d_and_a_param = temp_2\temp_1
 
-temp_1 = transpose(C_only_Jd_and_Ja)*delta_p_combined;
-temp_2 = transpose(C_only_Jd_and_Ja)* C_only_Jd_and_Ja;
+% actual_d_d_and_a_param = actual_d_DH_param(7:17);
 
-d_d_and_a_param = temp_2\temp_1
+% (d_d_and_a_param - actual_d_d_and_a_param)./(actual_d_d_and_a_param*1e3)
 
-actual_d_d_and_a_param = actual_d_DH_param(7:17);
-
-(d_d_and_a_param - actual_d_d_and_a_param)./(actual_d_d_and_a_param*1e3)
+% (d_DH_param - actual_d_DH_param)./actual_d_DH_param
 
