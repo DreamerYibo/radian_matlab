@@ -1,8 +1,14 @@
+% a test for real jointpositins in the experiment
+
 clc; clear;
 
 load ER20_1700_kine_fcn.mat
+load robo1_step1_data.mat
 
 X = deg2rad([10, 3, 10, 10, 5, 4]); % initial state of robo. At this state the robot end is at P1
+
+joint_series = joint_record(1:2:end,:);
+joint_series([3,5,7,9],:) = [];
 
 % These are ideal length value for the robot.
 L1 = 504;
@@ -25,38 +31,27 @@ L8 = L8 + (rand - 0.5) * L_error
 T6_t_real = DH_T_2(deg2rad(30), 90, 40, 0); % REAL TARGET transformation matrix from robot's end to the STS tool frame.
 
 T_ref_0_real_R = XYZ_Euler(deg2rad(0), deg2rad(0), deg2rad(38.7));
-T_ref_0_real_translation = [500; 600; 10.2];
+T_ref_0_real_translation = [1500; 600; 10.2];
 
 T_ref_0_real = [T_ref_0_real_R, T_ref_0_real_translation; 0, 0, 0, 1];
 
-r_X_t_test = zeros(4, 4, 1 + 3 * 2); %$ (ref: Radian base frame)STS tool frame at P1 , rotate about nominal TCP x_axis,
+r_X_t_test = zeros(4, 4, 15); %$ (ref: Radian base frame)STS tool frame at P1 , rotate about nominal TCP x_axis,
 % rotate about nominal TCP y_axis and rotate about nominal TCP y_axis respectively
 
+X = joint_series(1,:);
 r_X_t_test(:, :, 1) = T_ref_0_real * f_T0_6(L1, L2, L3, L4, L5, L8, X(1), X(2), X(3), X(4), X(5), X(6)) * T6_t_real;
+r_X_t_test(1:3, 4, 1) = r_X_t_test(1:3, 4, 1) + 0.1*randn(3,1) % noise on measured position
+
 disp("r_X_t_test(:, :, 1)=")
 disp(r_X_t_test(:, :, 1));
 
 for i = 2:7
     %rotate about the nominal TCP's X (Y or Z) axis; 2 samples for each case.
-    X_temp = f_T0_6(L_ideal(1), L_ideal(2), L_ideal(3), L_ideal(4), L_ideal(5), L_ideal(6), X(1), X(2), X(3), X(4), X(5), X(6));
-    
-    if (i <= 3)
-        angle_to_rot = [deg2rad(45) * (i - 1), 0, 0];
-    elseif (i <= 5)
-        angle_to_rot = [0, deg2rad(45) * (i - 3), 0];
-    elseif (i <= 7)
-        angle_to_rot = [0, 0, deg2rad(45) * (i - 5)];
-    end
-
-    X_rot_temp = X_temp(1:3, 1:3) * XYZ_Euler(angle_to_rot(1), angle_to_rot(2), angle_to_rot(3));
-    X_temp(1:3, 1:3) = X_rot_temp;
-    X_plan = efort_inv2(X_temp, L_ideal(1), L_ideal(2), L_ideal(3), L_ideal(4), L_ideal(5), L_ideal(6), f_T0_3, f_T0_4); % get inv sol with ideal DH param
-    [~, idx] = min(sum(abs(X_plan(:, :, 1) - X), 2)); % sum(X,2), sum along each row's elements
-    X_choose = X_plan(idx, :)
+    X_choose = joint_series(i,:);
     X6_actual = f_T0_6(L1, L2, L3, L4, L5, L8, X_choose(1), X_choose(2), X_choose(3), X_choose(4), X_choose(5), X_choose(6));
-
     % efort_inv2(X_temp, L1, L2, L3, L4, L5, L8, f_T0_3, f_T0_4); % disp if there is a valid inverse sol.
     r_X_t_test(:, :, i) = T_ref_0_real * X6_actual * T6_t_real;
+    r_X_t_test(1:3, 4, i) = r_X_t_test(1:3, 4, i) + 0.01*randn(3,1) % noise on measured position
     disp("r_X_t_test(:, :, i) = ");
     disp(r_X_t_test(:, :, i));
 end
@@ -126,23 +121,23 @@ T6_t_assume = [R6_t_assume, p6_t_assume; 0, 0, 0, 1]
 % T6_t_assume
 
 %% Find r_T_0. rotate joint 1 only. get 4 samples. (90 degree each time)
-T06_ideal = zeros(4, 4, 4); % get through param before calibration
-Tr_t_measured = zeros(4, 4, 4); % measured through Radian
-Tr_0_assume = zeros(4, 4, 4);
+% T06_ideal = zeros(4, 4, 4); % get through param before calibration
+% Tr_t_measured = zeros(4, 4, 4); % measured through Radian
+% Tr_0_assume = zeros(4, 4, 4);
 
-X = deg2rad([0, 3, 10, 10, 5, 4]);
+% X = deg2rad([0, 3, 10, 10, 5, 4]);
 
-for i = 1:4
+% for i = 1:4
 
-    T06_ideal(:, :, i) = f_T0_6(L_ideal(1), L_ideal(2), L_ideal(3), L_ideal(4), L_ideal(5), L_ideal(6), X(1), X(2), X(3), X(4), X(5), X(6));
-    Tr_t_measured(:, :, i) = T_ref_0_real * f_T0_6(L1, L2, L3, L4, L5, L8, X(1), X(2), X(3), X(4), X(5), X(6)) * T6_t_real;
+%     T06_ideal(:, :, i) = f_T0_6(L_ideal(1), L_ideal(2), L_ideal(3), L_ideal(4), L_ideal(5), L_ideal(6), X(1), X(2), X(3), X(4), X(5), X(6));
+%     Tr_t_measured(:, :, i) = T_ref_0_real * f_T0_6(L1, L2, L3, L4, L5, L8, X(1), X(2), X(3), X(4), X(5), X(6)) * T6_t_real;
 
-    Tr_6_assume = Tr_t_measured(:, :, i) * inv(T6_t_assume);
+%     Tr_6_assume = Tr_t_measured(:, :, i) * inv(T6_t_assume);
 
-    Tr_0_assume(:, :, i) = Tr_6_assume * inv(T06_ideal(:, :, i));
+%     Tr_0_assume(:, :, i) = Tr_6_assume * inv(T06_ideal(:, :, i));
 
-    if i <= 3
-        X(1) = X(1) + deg2rad(90);
-    end
+%     if i <= 3
+%         X(1) = X(1) + deg2rad(90);
+%     end
 
-end
+% end

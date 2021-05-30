@@ -14,7 +14,7 @@ function [dist, intersect_point1, intersect_point2] = find_dist_between_3d_lines
         t = zeros(2,1); 
         V = [-v1, v2];
         B = p1-p2+o1_o2;
-        t = linsolve(V,B) % solve the 3X2 2X1 = 3X1 linear systems. The algorithm is QR factorization.
+        t = linsolve(V,B); % solve the 3x2 2x1 = 3x1 linear systems. The algorithm is QR factorization.
         error1 = B - V*t;
 
         % if (any(abs(diff(t)) > 1e-8))
